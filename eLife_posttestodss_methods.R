@@ -108,10 +108,8 @@ weather$rain.aggr=unlist(weather %>% split(.$site) %>% future_map(function(x) x 
 dat_joined=dat_joined %>% left_join(weather,by=c("site","dt"))#%>% left_join(train_clin,by=c("site","dt")) 
 
 #handling some missing weather by using last available, only a few days 
-dat_joined$temp.aggr[1502:1505]=dat_joined$temp.aggr[1501]
-dat_joined$rain.aggr[1502:1505]=dat_joined$rain.aggr[1501]
-dat_joined$temp.aggr[2344:2348]=dat_joined$temp.aggr[2343]
-dat_joined$rain.aggr[2344:2348]=dat_joined$rain.aggr[2343]
+dat_joined=bind_rows(dat_joined %>% split(.$site) %>% purrr::map(. %>% mutate(temp.aggr=na.locf(temp.aggr),rain.aggr=na.locf(rain.aggr))))
+
 
 # creating seasonal curves 
 dat_joined=dat_joined %>% mutate(Seasonal_sine=sin(2*pi*.$dt/365.25),
@@ -220,8 +218,8 @@ test_dat$OR=OR
 
 # using historical "training" data 
 tst_daymo=train_dat %>% split(.$site) %>% purrr::map(. %>% mutate(daymo=(as.numeric(ymd(.$date.x)) %% 365)) %>% arrange(daymo)) 
-tst2=purrr::map(tst_daymo,function(x) 0:364 %>% purrr::map(function(z) x %>% filter(daymo>z-30,daymo<z+30) %>% summarize(mean(viral_only))))
-priordf=data.frame(site=rep(1:7,each=365),seas_ma=unlist(tst2),daymo=rep(1:365,7)) %>% replace(is.na(.), 0) %>% mutate(preOdds=log(seas_ma/(1-seas_ma)))
+tst2=purrr::map(tst_daymo,function(x) 366:730 %>% purrr::map(function(y) c(0:364,0:364,0:364)[(y-29):(y+29)]) %>% purrr::map(function(z) x %>% filter(daymo %in% z) %>% summarize(mean(viral_only))))
+priordf=data.frame(site=rep(1:7,each=365),seas_ma=unlist(tst2),daymo=rep(0:364,7)) %>% replace(is.na(.), 0) %>% mutate(preOdds=log(seas_ma/(1-seas_ma)))
 
 test_dat$daymo=as.numeric(ymd(test_dat$date.x)) %% 365
 test_dat=test_dat  %>% left_join(priordf,by=c("site","daymo"))
